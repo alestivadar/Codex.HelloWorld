@@ -1,0 +1,284 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#071624">
+  <meta name="description" content="Shoot hoops in a touch-friendly basketball game.">
+  <title>Pig Basketball — Basketball Mini Game</title>
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+  <style>
+    *{box-sizing:border-box}
+    html,body{margin:0;background:#071624;color:#ecf7ff;font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+    .game-shell{background:linear-gradient(165deg,#112e43,#091826);border:1px solid #2b4e63;border-radius:24px;overflow:hidden;box-shadow:0 24px 75px #0007}
+    #court{display:block;width:100%;height:min(70vh,620px);min-height:390px;touch-action:none;cursor:crosshair}
+    .glass{background:#112b3d;border:1px solid #29465b;border-radius:18px}
+    .game-btn{border:1px solid #5c859a;background:#1a435a;color:#f0fbff;padding:12px 18px;border-radius:14px;font-weight:750;cursor:pointer}
+    .game-btn:active{transform:scale(.97)}.game-btn:focus-visible{outline:2px solid #67e8f9;outline-offset:3px}
+    #toast{pointer-events:none;transition:opacity .18s}
+  </style>
+</head>
+<body>
+  <main class="mx-auto max-w-5xl px-3 pb-10 pt-6 sm:px-6">
+    <header class="mb-5 flex flex-wrap items-end justify-between gap-4">
+      <div><p class="text-xs font-black uppercase tracking-[.25em] text-cyan-300">Arcade / skill shot</p><h1 class="mt-1 text-3xl font-black tracking-tight sm:text-5xl">🏀 HOOP <span class="text-cyan-300">SHOT</span></h1></div>
+      <button class="game-btn" id="newGame" type="button">↻ New game</button>
+    </header>
+    <section class="game-shell" aria-label="Basketball shooting game">
+      <div class="grid grid-cols-3 gap-px bg-[#264457] text-center">
+        <div class="bg-[#102b3d] px-2 py-4"><div class="text-[11px] font-bold uppercase tracking-widest text-slate-400">Score</div><div class="mt-1 text-3xl font-black text-white" id="score">0</div></div>
+        <div class="bg-[#102b3d] px-2 py-4"><div class="text-[11px] font-bold uppercase tracking-widest text-slate-400">Shots</div><div class="mt-1 text-3xl font-black text-white" id="shots">0</div></div>
+        <div class="bg-[#102b3d] px-2 py-4"><div class="text-[11px] font-bold uppercase tracking-widest text-slate-400">Best</div><div class="mt-1 text-3xl font-black text-cyan-300" id="best">0</div></div>
+      </div>
+      <div class="relative">
+        <canvas id="court" aria-label="A basketball court with ball at left and hoop at right. Drag backwards from the ball, then release to shoot."></canvas>
+        <div class="pointer-events-none absolute left-3 top-3 z-10 w-[96px] sm:w-[124px] rounded-2xl border-2 border-pink-300/80 bg-slate-950/80 p-1.5 shadow-lg shadow-pink-500/20">
+          <img alt="Fluffy pink pig sitting with crossed arms, watching the basketball game" class="h-[107px] w-full rounded-xl object-cover sm:h-[143px]" src="data:image/jpeg;base64,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">
+          <p class="pt-1 text-center text-[10px] font-black uppercase tracking-wider text-pink-200">🐷 VIP Spectator</p>
+        </div>
+        <div id="toast" class="absolute left-1/2 top-[17%] -translate-x-1/2 rounded-2xl border border-cyan-300/30 bg-slate-950/80 px-5 py-3 text-center text-lg font-black text-white opacity-0" role="status" aria-live="polite"></div>
+      </div>
+      <div class="flex flex-wrap items-center justify-between gap-3 border-t border-[#284b5d] bg-[#0c2637] px-4 py-3">
+        <div><p class="text-sm font-bold text-cyan-200" id="message">Pull back on the ball and release!</p><p class="text-xs text-slate-400">Drag down and left to aim up and right</p></div>
+        <button id="retry" class="game-btn text-sm" type="button">↻ Next ball</button>
+      </div>
+    </section>
+    <div class="mt-4 grid gap-3 sm:grid-cols-2">
+      <div class="glass p-4"><p class="text-sm font-bold text-cyan-200">👆 How to play</p><p class="mt-1 text-sm text-slate-300">Touch the basketball, pull it backwards to aim, and release. Follow the dotted trajectory to line up your shot.</p></div>
+      <div class="glass p-4"><p class="text-sm font-bold text-cyan-200">🏆 Challenge</p><p class="mt-1 text-sm text-slate-300">Every clean basket earns 2 points. Try to beat your best score! Works with touch or mouse.</p></div>
+    </div>
+    <p class="mt-5 text-center text-xs text-slate-500">Made for Android browsers • Vanilla JavaScript + Tailwind CSS • No install required</p>
+  </main>
+  <script>
+    (() => {
+      'use strict';
+      const canvas=document.getElementById('court'),ctx=canvas.getContext('2d');
+      const scoreEl=document.getElementById('score'),shotsEl=document.getElementById('shots'),bestEl=document.getElementById('best');
+      const message=document.getElementById('message'),toast=document.getElementById('toast');
+      let W=400,H=600,dpr=1,score=0,shots=0,best=0,mode='ready',down=null;
+      let ball={x:0,y:0,vx:0,vy:0,r:13,spin:0,scored:false},aim={x:0,y:0},time=0,resetTimer=0,toastTimer=0;
+      let rim={x:0,y:0,half:32},floorY=0,origin={x:0,y:0},particles=[];
+      const gravity=830;
+      try{best=Number(localStorage.getItem('hoop-shot-best')||0)||0;}catch(e){}
+      bestEl.textContent=best;
+      function world(){
+        const rect=canvas.getBoundingClientRect();
+        dpr=Math.min(window.devicePixelRatio||1,2);
+        W=Math.max(280,rect.width);H=Math.max(360,rect.height);
+        canvas.width=Math.round(W*dpr);canvas.height=Math.round(H*dpr);
+        ctx.setTransform(dpr,0,0,dpr,0,0);
+        floorY=H*.87;
+        origin={x:Math.max(55,W*.18),y:floorY-16};
+        rim={x:W*.78,y:H*.35,half:Math.max(23,Math.min(36,W*.085))};
+        if(mode==='ready'||mode==='aiming'){ball.x=origin.x;ball.y=origin.y;}
+      }
+      const resizeObserver=new ResizeObserver(world);resizeObserver.observe(canvas);
+      function newBall(){
+        ball={x:origin.x,y:origin.y,vx:0,vy:0,r:Math.max(11,Math.min(16,W*.037)),spin:0,scored:false};
+        mode='ready';down=null;aim={x:0,y:0};resetTimer=0;
+        message.textContent='Pull back on the ball and release!';
+      }
+      function showToast(text){
+        toast.textContent=text;toast.style.opacity='1';toastTimer=1.45;
+      }
+      function updateStats(){scoreEl.textContent=score;shotsEl.textContent=shots;bestEl.textContent=best;}
+      function launch(dx,dy){
+        const length=Math.hypot(dx,dy);
+        if(length<9){mode='ready';return;}
+        const limit=150,k=Math.min(1,limit/length);
+        // Pull down/left; the ball travels up/right.
+        const speedScale=6.2;
+        ball.vx=-dx*k*speedScale;
+        ball.vy=-dy*k*speedScale;
+        // Keep the ball within a reasonable range for a skill-based throw.
+        mode='flight';shots++;updateStats();
+        message.textContent='Ball in the air…';
+      }
+      function point(e){
+        const rect=canvas.getBoundingClientRect();
+        return{x:e.clientX-rect.left,y:e.clientY-rect.top};
+      }
+      canvas.addEventListener('pointerdown',e=>{
+        if(mode!=='ready')return;
+        const p=point(e);
+        if(Math.hypot(p.x-ball.x,p.y-ball.y)>Math.max(85,W*.23))return;
+        down=p;aim={x:0,y:0};mode='aiming';
+        canvas.setPointerCapture(e.pointerId);
+        e.preventDefault();
+      });
+      canvas.addEventListener('pointermove',e=>{
+        if(mode!=='aiming'||!down)return;
+        const p=point(e);aim={x:p.x-down.x,y:p.y-down.y};
+        e.preventDefault();
+      });
+      canvas.addEventListener('pointerup',e=>{
+        if(mode!=='aiming'||!down)return;
+        const p=point(e),dx=p.x-down.x,dy=p.y-down.y;
+        down=null;launch(dx,dy);e.preventDefault();
+      });
+      canvas.addEventListener('pointercancel',()=>{if(mode==='aiming'){mode='ready';down=null;}});
+      document.getElementById('retry').addEventListener('click',newBall);
+      document.getElementById('newGame').addEventListener('click',()=>{score=0;shots=0;updateStats();newBall();});
+
+      function roundedRect(x,y,w,h,r){ctx.beginPath();ctx.roundRect(x,y,w,h,r);}
+      function line(x1,y1,x2,y2){ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.stroke();}
+      function circle(x,y,r){ctx.beginPath();ctx.arc(x,y,r,0,Math.PI*2);}
+      function ballArt(x,y,r,spin,ghost=false){
+        ctx.save();
+        ctx.translate(x,y);
+        ctx.rotate(spin * 0.2);
+        if(ghost)ctx.globalAlpha=.5;
+        // Little pink ears
+        ctx.fillStyle='#f7a8c2';
+        ctx.strokeStyle='#a54d72';
+        ctx.lineWidth=Math.max(1.2,r*.09);
+        for(const side of [-1,1]){
+          ctx.beginPath();
+          ctx.moveTo(side*r*.36,-r*.56);
+          ctx.lineTo(side*r*.83,-r*1.16);
+          ctx.lineTo(side*r*.10,-r*.86);
+          ctx.closePath();ctx.fill();ctx.stroke();
+          ctx.fillStyle='#f48fb1';
+          ctx.beginPath();
+          ctx.moveTo(side*r*.35,-r*.79);
+          ctx.lineTo(side*r*.68,-r*1.05);
+          ctx.lineTo(side*r*.22,-r*.90);
+          ctx.closePath();ctx.fill();
+          ctx.fillStyle='#f7a8c2';
+        }
+        // Piggy face
+        ctx.fillStyle='#f7a8c2';
+        circle(0,0,r);ctx.fill();ctx.stroke();
+        ctx.fillStyle='#2b1d24';
+        circle(-r*.33,-r*.19,r*.095);ctx.fill();
+        circle(r*.33,-r*.19,r*.095);ctx.fill();
+        ctx.fillStyle='#f48fb1';
+        ctx.beginPath();ctx.ellipse(0,r*.22,r*.43,r*.29,0,0,Math.PI*2);
+        ctx.fill();ctx.stroke();
+        ctx.fillStyle='#8b3d5c';
+        ctx.beginPath();ctx.ellipse(-r*.13,r*.22,r*.065,r*.10,0,0,Math.PI*2);ctx.fill();
+        ctx.beginPath();ctx.ellipse(r*.13,r*.22,r*.065,r*.10,0,0,Math.PI*2);ctx.fill();
+        ctx.restore();
+      }
+      function draw(){
+        ctx.setTransform(dpr,0,0,dpr,0,0);
+        ctx.clearRect(0,0,W,H);
+        const bg=ctx.createLinearGradient(0,0,0,H);
+        bg.addColorStop(0,'#12384d');bg.addColorStop(.7,'#0d273a');bg.addColorStop(1,'#14273c');
+        ctx.fillStyle=bg;ctx.fillRect(0,0,W,H);
+        // Floodlights and subtle stadium rows.
+        for(let i=0;i<5;i++){
+          ctx.strokeStyle='rgba(94,168,189,.08)';ctx.lineWidth=1;
+          const y=H*.14+i*H*.09;line(0,y,W,y);
+        }
+        for(let i=0;i<24;i++){
+          const x=(i*87)%W,y=H*.09+(i%4)*H*.064;
+          ctx.fillStyle='rgba(159,224,238,.14)';circle(x,y,1.8);ctx.fill();
+        }
+        ctx.fillStyle='#164457';ctx.fillRect(0,floorY,W,H-floorY);
+        ctx.fillStyle='#237a83';ctx.fillRect(0,floorY,W,5);
+        ctx.strokeStyle='rgba(130,234,236,.27)';ctx.lineWidth=2;
+        ctx.beginPath();ctx.ellipse(origin.x,floorY,W*.23,H*.075,0,Math.PI,Math.PI*2);ctx.stroke();
+        ctx.beginPath();ctx.ellipse(W*.72,floorY,W*.18,H*.08,0,Math.PI,Math.PI*2);ctx.stroke();
+        // Backboard, pole, hoop and net.
+        const boardX=rim.x+rim.half+11;
+        ctx.strokeStyle='#768fa3';ctx.lineWidth=9;line(boardX+6,rim.y-36,boardX+6,floorY);
+        ctx.fillStyle='#ccdcea';roundedRect(boardX-5,rim.y-65,12,105,3);ctx.fill();
+        ctx.strokeStyle='#f1f8ff';ctx.lineWidth=3;ctx.strokeRect(boardX-8,rim.y-72,16,111);
+        ctx.strokeStyle='#e65f32';ctx.lineWidth=3;ctx.strokeRect(boardX-8,rim.y-20,8,40);
+        const left=rim.x-rim.half,right=rim.x+rim.half;
+        ctx.strokeStyle='rgba(213,238,247,.7)';ctx.lineWidth=1.5;
+        for(let i=0;i<=7;i++){
+          const xx=left+(right-left)*i/7, bottom=rim.x+(xx-rim.x)*.6;
+          line(xx,rim.y+4,bottom,rim.y+49);
+        }
+        for(let j=1;j<=4;j++){
+          const ratio=j/5,y=rim.y+ratio*49;
+          line(left+(rim.half*.4)*ratio,y,right-(rim.half*.4)*ratio,y);
+        }
+        // Arc and power guidance.
+        if(mode==='aiming'){
+          const len=Math.hypot(aim.x,aim.y),k=Math.min(1,150/Math.max(1,len));
+          const vx=-aim.x*k*6.2,vy=-aim.y*k*6.2;
+          ctx.strokeStyle='#67dce7';ctx.lineWidth=3;line(ball.x,ball.y,ball.x+aim.x*k,ball.y+aim.y*k);
+          ctx.fillStyle='rgba(124,235,240,.7)';
+          for(let t=.15;t<1.8;t+=.12){
+            const x=ball.x+vx*t,y=ball.y+vy*t+.5*gravity*t*t;
+            if(x<0||x>W||y>floorY)break;
+            circle(x,y,Math.max(1.5,3-t));ctx.fill();
+          }
+          ctx.fillStyle='#a6ecf4';ctx.font='bold 13px system-ui';ctx.textAlign='left';
+          ctx.fillText('RELEASE TO SHOOT',Math.min(W-175,Math.max(12,origin.x+18)),Math.max(25,origin.y-60));
+          ballArt(ball.x+aim.x*k*.35,ball.y+aim.y*k*.35,ball.r,0,true);
+        }
+        // Ball shadow and ball.
+        const height=Math.max(0,floorY-ball.y);
+        ctx.fillStyle='rgba(0,0,0,.17)';
+        ctx.beginPath();ctx.ellipse(ball.x,floorY+6,ball.r*(1.15+height/H),ball.r*.35,0,0,Math.PI*2);ctx.fill();
+        ballArt(ball.x,ball.y,ball.r,ball.spin);
+        // Rim over the ball for depth.
+        ctx.strokeStyle='#fb7735';ctx.lineWidth=5;ctx.lineCap='round';line(left,rim.y,right,rim.y);
+        ctx.fillStyle='#ff9c4f';circle(left,rim.y,4);ctx.fill();circle(right,rim.y,4);ctx.fill();
+        for(const p of particles){
+          ctx.globalAlpha=Math.max(0,p.life);ctx.fillStyle=p.color;circle(p.x,p.y,p.r);ctx.fill();
+        }
+        ctx.globalAlpha=1;
+        if(mode==='ready'){
+          ctx.fillStyle='rgba(230,248,255,.85)';ctx.textAlign='center';ctx.font='700 13px system-ui';
+          ctx.fillText('↓ PULL BACK',origin.x,Math.max(30,origin.y-43));
+          ctx.strokeStyle='rgba(255,255,255,.45)';ctx.lineWidth=2;
+          line(origin.x,origin.y+ball.r+7,origin.x-19,origin.y+ball.r+34);
+        }
+      }
+      function finish(){
+        mode='settle';resetTimer=1.05;
+        if(!ball.scored)message.textContent='Miss! Adjust your aim and try again.';
+      }
+      function physics(dt){
+        if(mode==='flight'){
+          const oldX=ball.x,oldY=ball.y;
+          ball.vy+=gravity*dt;ball.x+=ball.vx*dt;ball.y+=ball.vy*dt;ball.spin+=ball.vx*dt/ball.r*.7;
+          const left=rim.x-rim.half,right=rim.x+rim.half;
+          if(!ball.scored&&ball.vy>0&&oldY<rim.y&&ball.y>=rim.y&&ball.x>left+ball.r*.45&&ball.x<right-ball.r*.45){
+            ball.scored=true;score+=2;
+            if(score>best){best=score;try{localStorage.setItem('hoop-shot-best',String(best));}catch(e){}}
+            updateStats();showToast('🏀 SWISH! +2');message.textContent='Great shot! +2 points';
+            for(let i=0;i<24;i++)particles.push({x:rim.x,y:rim.y,r:2+Math.random()*4,vx:(Math.random()-.5)*220,vy:-Math.random()*210,life:1,color:i%2?'#facc15':'#67e8f9'});
+          }
+          // Backboard bounce from its front face.
+          const wallX=right+9;
+          if(ball.x+ball.r>=wallX&&oldX+ball.r<wallX&&ball.y>rim.y-72&&ball.y<rim.y+40){
+            ball.x=wallX-ball.r;ball.vx=-Math.abs(ball.vx)*.56;
+          }
+          // Rim contact gives a small deflection instead of passing through the metal.
+          for(const rx of [left,right]){
+            const dx=ball.x-rx,dy=ball.y-rim.y,d=Math.hypot(dx,dy),min=ball.r+3;
+            if(d<min&&d>.001){
+              const nx=dx/d,ny=dy/d,dot=ball.vx*nx+ball.vy*ny;
+              ball.x=rx+nx*min;ball.y=rim.y+ny*min;
+              if(dot<0){ball.vx-=1.55*dot*nx;ball.vy-=1.55*dot*ny;}
+            }
+          }
+          if(ball.y+ball.r>=floorY){
+            ball.y=floorY-ball.r;ball.vy*=-.36;ball.vx*=.72;
+            if(Math.abs(ball.vy)<85||ball.scored)finish();
+          }
+          if(ball.x>W+70||ball.x< -70||ball.y>H+80||ball.y< -H*1.5)finish();
+        }else if(mode==='settle'){
+          resetTimer-=dt;
+          if(resetTimer<=0)newBall();
+        }
+        for(const p of particles){p.x+=p.vx*dt;p.y+=p.vy*dt;p.vy+=400*dt;p.life-=dt*1.1;}
+        particles=particles.filter(p=>p.life>0);
+        if(toastTimer>0){toastTimer-=dt;if(toastTimer<=0)toast.style.opacity='0';}
+      }
+      let last=0;
+      function frame(t){
+        const dt=Math.min(.033,(t-last)/1000||.016);last=t;
+        physics(dt);draw();requestAnimationFrame(frame);
+      }
+      world();newBall();updateStats();requestAnimationFrame(frame);
+    })();
+  </script>
+</body>
+</html>
