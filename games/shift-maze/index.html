@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#080f19">
+<meta name="description" content="A shifting labyrinth with touch joystick controls.">
+<title>Shift Maze</title>
+<style>
+*{box-sizing:border-box}html,body{height:100%;width:100%;margin:0;overflow:hidden;overscroll-behavior:none;background:#080f19}
+body{display:flex;justify-content:center;align-items:center;font-family:system-ui,-apple-system,sans-serif}
+#game{width:100%;height:100vh;height:100dvh;max-width:570px;max-height:840px;display:flex;flex-direction:column;overflow:hidden;background:#f3f7fb;border:0;position:relative}
+#board{flex:1;min-height:0;position:relative;overflow:hidden;touch-action:none;background:#fafafa}
+canvas{display:block;width:100%;height:100%;touch-action:none}
+#hud{position:absolute;right:12px;top:12px;width:42px;height:42px;pointer-events:none;filter:drop-shadow(0 3px 5px #0004)}
+#controls{height:clamp(126px,21dvh,166px);flex-shrink:0;display:flex;align-items:center;justify-content:center;background:#0d1a28;box-shadow:0 -5px 15px #0002;touch-action:none;padding-bottom:env(safe-area-inset-bottom,0px)}
+#stick{position:relative;width:116px;height:116px;border-radius:50%;background:radial-gradient(circle,#243e54,#14283a);border:2px solid #52718a;box-shadow:inset 0 7px 20px #0006,0 8px 18px #0004;touch-action:none;user-select:none;-webkit-user-select:none}
+#stick:before,#stick:after{content:"";position:absolute;pointer-events:none;background:#87aac055}
+#stick:before{height:1px;width:80%;top:50%;left:10%}#stick:after{width:1px;height:80%;left:50%;top:10%}
+#knob{position:absolute;left:50%;top:50%;width:57px;height:57px;border-radius:50%;transform:translate(-50%,-50%);background:radial-gradient(circle at 34% 28%,#b4eaff,#2c87b8 67%,#1a4c76);border:3px solid #92d8f7;box-shadow:0 6px 16px #0007;pointer-events:none}
+#announce{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap}
+@media(min-width:700px){#game{height:min(840px,calc(100dvh - 24px));border:1px solid #2a4c65;border-radius:18px;box-shadow:0 24px 65px #0009}}
+@media(max-height:510px){#controls{height:100px}#stick{width:86px;height:86px}#knob{width:44px;height:44px}#hud{width:32px;height:32px}}
+</style>
+</head>
+<body>
+<main id="game" aria-label="Shift Maze game">
+<div id="board" aria-label="Random maze. Guide the blue player to the glowing green destination.">
+<canvas id="maze"></canvas><canvas id="hud" width="100" height="100" aria-hidden="true"></canvas>
+</div>
+<div id="controls"><div id="stick" role="group" aria-label="Movement joystick"><div id="knob"></div></div></div>
+<div id="announce" role="status" aria-live="polite"></div>
+</main>
+<script>
+(()=>{
+'use strict';
+const board=document.getElementById('board'),canvas=document.getElementById('maze'),ctx=canvas.getContext('2d'),hud=document.getElementById('hud'),g=hud.getContext('2d'),stick=document.getElementById('stick'),knob=document.getElementById('knob'),announce=document.getElementById('announce');
+let W=0,H=0,cols=11,rows=15,tileW=1,tileH=1,grid=[],px=1.5,py=1.5,goal={x:9,y:13},joystick={x:0,y:0},pointer=null,keys=new Set(),elapsed=0,celebrate=0,particles=[],last=0;
+const PERIOD=10, WARNING=3;
+const dirs=[[0,-2],[2,0],[0,2],[-2,0]];
+const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+function isWall(x,y){return x<0||y<0||x>=cols||y>=rows||grid[Math.floor(y)*cols+Math.floor(x)]===1;}
+function carveMaze(){
+  grid=new Uint8Array(cols*rows).fill(1);
+  const index=(x,y)=>y*cols+x;
+  const stack=[[1,1]];
+  grid[index(1,1)]=0;
+  while(stack.length){
+    const [x,y]=stack[stack.length-1];
+    const options=dirs.filter(([dx,dy])=>x+dx>0&&x+dx<cols-1&&y+dy>0&&y+dy<rows-1&&grid[index(x+dx,y+dy)]===1);
+    if(!options.length){stack.pop();continue;}
+    const [dx,dy]=options[Math.floor(Math.random()*options.length)];
+    grid[index(x+dx/2,y+dy/2)]=0;
+    grid[index(x+dx,y+dy)]=0;
+    stack.push([x+dx,y+dy]);
+  }
+  // A few extra doors create shorter, varied paths while preserving reachability.
+  for(let y=2;y<rows-2;y++)for(let x=2;x<cols-2;x++){
+    if(grid[index(x,y)]===1&&Math.random()<.17){
+      const horizontal=grid[index(x-1,y)]===0&&grid[index(x+1,y)]===0;
+      const vertical=grid[index(x,y-1)]===0&&grid[index(x,y+1)]===0;
+      if(horizontal||vertical)grid[index(x,y)]=0;
+    }
+  }
+  // Choose a reachable destination on the opposite side.
+  const dist=new Int32Array(cols*rows).fill(-1),queue=[[1,1]];
+  dist[index(1,1)]=0;
+  for(let k=0;k<queue.length;k++){
+    const [x,y]=queue[k];
+    for(const [dx,dy] of [[0,1],[1,0],[0,-1],[-1,0]]){
+      const nx=x+dx,ny=y+dy;
+      if(nx<0||ny<0||nx>=cols||ny>=rows||grid[index(nx,ny)]||dist[index(nx,ny)]!==-1)continue;
+      dist[index(nx,ny)]=dist[index(x,y)]+1;queue.push([nx,ny]);
+    }
+  }
+  let choices=queue.filter(([x,y])=>x>cols*.54&&y>rows*.50);
+  if(!choices.length)choices=queue.filter(([x,y])=>dist[index(x,y)]>5);
+  choices.sort((a,b)=>dist[index(b[0],b[1])]-dist[index(a[0],a[1])]);
+  const choice=choices[Math.floor(Math.random()*Math.max(1,Math.min(5,choices.length)))]||queue[queue.length-1];
+  goal={x:choice[0]+.5,y:choice[1]+.5};
+  px=1.5;py=1.5;elapsed=0;celebrate=0;particles=[];
+}
+function resize(){
+  const rect=board.getBoundingClientRect();
+  W=Math.max(150,rect.width);H=Math.max(150,rect.height);
+  const dpr=Math.min(2,window.devicePixelRatio||1);
+  canvas.width=Math.round(W*dpr);canvas.height=Math.round(H*dpr);
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  // Odd grid dimensions. Tile shape remains square so collision/motion feel consistent.
+  const base=11;
+  cols=base;
+  rows=clamp(Math.round((H/W)*base)|1,11,29);
+  if(rows%2===0)rows++;
+  tileW=W/cols;tileH=H/rows;
+  carveMaze();
+}
+function canMove(x,y){
+  const r=.24;
+  return !isWall(x-r,y-r)&&!isWall(x+r,y-r)&&!isWall(x-r,y+r)&&!isWall(x+r,y+r);
+}
+function movement(dt){
+  let vx=joystick.x,vy=joystick.y;
+  if(keys.has('arrowleft')||keys.has('a'))vx-=1;
+  if(keys.has('arrowright')||keys.has('d'))vx+=1;
+  if(keys.has('arrowup')||keys.has('w'))vy-=1;
+  if(keys.has('arrowdown')||keys.has('s'))vy+=1;
+  const mag=Math.hypot(vx,vy);
+  if(mag>.01){vx/=Math.max(1,mag);vy/=Math.max(1,mag);}
+  const speed=5.0,dx=vx*dt*speed,dy=vy*dt*speed;
+  // Axis-separated collision lets the character slide smoothly along walls.
+  if(canMove(px+dx,py))px+=dx;
+  if(canMove(px,py+dy))py+=dy;
+}
+function strokeCircle(x,y,r,color){ctx.beginPath();ctx.arc(x,y,r,0,Math.PI*2);ctx.fillStyle=color;ctx.fill();}
+function draw(){
+  const timeLeft=PERIOD-elapsed;
+  const warn=clamp((WARNING-timeLeft)/WARNING,0,1);
+  // Smooth white-to-red warning over the final three seconds.
+  const blend=warn*warn*(3-2*warn);
+  const red=Math.round(250-23*blend),green=Math.round(252-190*blend),blue=Math.round(255-185*blend);
+  ctx.fillStyle='rgb('+red+','+green+','+blue+')';ctx.fillRect(0,0,W,H);
+  const margin=0;
+  const inset=Math.max(1,Math.min(tileW,tileH)*.035);
+  for(let y=0;y<rows;y++)for(let x=0;x<cols;x++){
+    if(grid[y*cols+x]!==1)continue;
+    const cellX=x*tileW,cellY=y*tileH;
+    ctx.fillStyle=warn>.5?'#341c31':'#172f49';
+    ctx.fillRect(cellX+margin,cellY+margin,tileW+inset,tileH+inset);
+    ctx.fillStyle=warn>.5?'#704255':'#2d5472';
+    ctx.fillRect(cellX+inset,cellY+inset,tileW-inset*2,Math.max(2,tileH*.07));
+  }
+  const gx=goal.x*tileW,gy=goal.y*tileH;
+  const glow=ctx.createRadialGradient(gx,gy,1,gx,gy,Math.min(tileW,tileH)*1.3);
+  glow.addColorStop(0,'#57ff9a99');glow.addColorStop(1,'#57ff9a00');
+  ctx.fillStyle=glow;ctx.beginPath();ctx.arc(gx,gy,Math.min(tileW,tileH)*1.3,0,Math.PI*2);ctx.fill();
+  strokeCircle(gx,gy,Math.min(tileW,tileH)*.36,'#0a9862');
+  strokeCircle(gx,gy,Math.min(tileW,tileH)*.22,'#75ffc6');
+  // Small animated player with an inner highlight.
+  const radius=Math.min(tileW,tileH)*.29;
+  ctx.shadowColor='#00b5ff';ctx.shadowBlur=14;
+  strokeCircle(px*tileW,py*tileH,radius,'#047bbd');
+  ctx.shadowBlur=0;
+  strokeCircle(px*tileW-radius*.19,py*tileH-radius*.24,radius*.48,'#b7f3ff');
+  for(const p of particles){ctx.globalAlpha=Math.max(0,p.life);strokeCircle(p.x,p.y,p.r,p.color);}
+  ctx.globalAlpha=1;
+  g.clearRect(0,0,100,100);
+  g.beginPath();g.arc(50,50,38,-Math.PI/2,Math.PI*1.5);
+  g.lineWidth=10;g.strokeStyle='#112e43';g.stroke();
+  g.beginPath();g.arc(50,50,38,-Math.PI/2,-Math.PI/2+Math.PI*2*(timeLeft/PERIOD));
+  g.strokeStyle=warn>.01?'#ff3458':'#24b7de';g.lineCap='round';g.stroke();
+  g.beginPath();g.arc(50,50,24,0,Math.PI*2);g.fillStyle='#fff';g.fill();
+}
+function update(dt){
+  if(celebrate>0){
+    celebrate-=dt;
+    if(celebrate<=0){carveMaze();announce.textContent='New maze';}
+  }else{
+    movement(dt);
+    elapsed+=dt;
+    if(Math.hypot(px-goal.x,py-goal.y)<.43){
+      celebrate=.8;
+      announce.textContent='Goal reached';
+      for(let i=0;i<30;i++)particles.push({x:goal.x*tileW,y:goal.y*tileH,vx:(Math.random()-.5)*210,vy:(Math.random()-.5)*210,r:2+Math.random()*5,life:1,color:i%2?'#0a9862':'#ffbd4b'});
+    }else if(elapsed>=PERIOD){
+      carveMaze();announce.textContent='Maze changed';
+    }
+  }
+  particles.forEach(p=>{p.x+=p.vx*dt;p.y+=p.vy*dt;p.life-=dt*1.4;});
+  particles=particles.filter(p=>p.life>0);
+}
+function stickMove(e){
+  const b=stick.getBoundingClientRect(),cx=b.left+b.width/2,cy=b.top+b.height/2;
+  const dx=e.clientX-cx,dy=e.clientY-cy,max=b.width*.32,length=Math.hypot(dx,dy);
+  const n=Math.min(length,max)/Math.max(length,.001);
+  const x=dx*n,y=dy*n;
+  joystick={x:x/max,y:y/max};
+  knob.style.transform='translate(calc(-50% + '+x+'px),calc(-50% + '+y+'px))';
+}
+function release(e){
+  if(pointer===null||(e&&e.pointerId!==pointer))return;
+  pointer=null;joystick={x:0,y:0};
+  knob.style.transform='translate(-50%,-50%)';
+}
+stick.addEventListener('pointerdown',e=>{if(pointer!==null)return;pointer=e.pointerId;stick.setPointerCapture(e.pointerId);stickMove(e);e.preventDefault();});
+stick.addEventListener('pointermove',e=>{if(pointer===e.pointerId){stickMove(e);e.preventDefault();}});
+stick.addEventListener('pointerup',release);
+stick.addEventListener('pointercancel',release);
+stick.addEventListener('lostpointercapture',()=>release(null));
+window.addEventListener('keydown',e=>{const key=e.key.toLowerCase();if(['arrowup','arrowdown','arrowleft','arrowright','w','a','s','d'].includes(key)){keys.add(key);e.preventDefault();}});
+window.addEventListener('keyup',e=>keys.delete(e.key.toLowerCase()));
+window.addEventListener('blur',()=>keys.clear());
+const observer=new ResizeObserver(()=>resize());observer.observe(board);
+resize();
+function frame(now){const dt=Math.min(.04,(now-last)/1000||.016);last=now;update(dt);draw();requestAnimationFrame(frame);}
+requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
