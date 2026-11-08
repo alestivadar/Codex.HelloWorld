@@ -1,27 +1,231 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="description" content="A Hello World webpage styled with Tailwind CSS." />
-  <title>Hello World | Tailwind CSS</title>
-  <!-- Tailwind CSS browser build: convenient for a first test, not production. -->
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#070d19">
+  <meta name="description" content="An interactive six-axis robot welding the name Aleš in 3D.">
+  <title>ALEŠ // Robot Welding Lab</title>
   <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+  <style>
+    html,body{margin:0;min-height:100%;background:#070d19;color:#eef5ff;font-family:system-ui,-apple-system,sans-serif}
+    #viewport{width:100%;height:min(65vh,720px);min-height:340px;position:relative;overflow:hidden;touch-action:pan-y;background:radial-gradient(ellipse at 50% 45%,#14263c,#070d19 74%)}
+    #viewport canvas{display:block;width:100%;height:100%;touch-action:none}
+    .glass{background:rgba(10,19,33,.85);border:1px solid #28425d}
+    .pill{border:1px solid #33506e;background:#122337;border-radius:999px;padding:.65rem 1rem;font-size:.85rem;font-weight:650}
+    .pill:active{transform:scale(.97)}.pill:focus-visible{outline:2px solid #56d9ef;outline-offset:3px}
+    .mini{letter-spacing:.18em;text-transform:uppercase;font-size:.69rem;color:#7dd3fc;font-weight:800}
+    #progress{transition:width .1s linear}
+  </style>
+  <script type="importmap">
+    {"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.164.1/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.164.1/examples/jsm/"}}
+  </script>
 </head>
-<body class="min-h-screen bg-slate-950 text-white flex items-center justify-center px-6">
-  <main class="w-full max-w-lg rounded-2xl border border-slate-700 bg-slate-900 p-8 text-center shadow-2xl">
-    <p class="mb-4 text-sm font-semibold uppercase tracking-widest text-sky-400">My first Tailwind CSS webpage</p>
-    <h1 class="mb-4 text-4xl font-extrabold tracking-tight sm:text-5xl">Hello World! 👋</h1>
-    <p class="mb-8 text-slate-300">This page is hosted in my GitHub repository and styled with Tailwind CSS.</p>
-    <button id="helloButton" type="button" class="rounded-lg bg-blue-600 px-6 py-3 font-semibold text-white shadow-lg transition hover:bg-blue-500 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-400 active:scale-95">
-      Click me
-    </button>
-    <p id="message" role="status" aria-live="polite" class="mt-5 min-h-6 text-emerald-400"></p>
+<body>
+  <header class="mx-auto flex max-w-6xl items-center justify-between px-5 py-5">
+    <div><p class="mini">Interactive manufacturing demo</p><h1 class="mt-1 text-2xl font-black tracking-tight sm:text-3xl">ROBOT <span class="text-cyan-400">WELDING LAB</span></h1></div>
+    <span class="rounded-full border border-emerald-400/30 bg-emerald-400/10 px-3 py-2 text-xs font-bold text-emerald-300">● 6 AXIS</span>
+  </header>
+  <main class="mx-auto max-w-6xl px-3 pb-10 sm:px-5">
+    <div class="relative overflow-hidden rounded-3xl border border-slate-700/80 shadow-2xl shadow-cyan-950/20">
+      <div id="viewport" role="img" aria-label="Interactive 3D industrial robot tracing the name Aleš with glowing welds">
+        <div class="pointer-events-none absolute left-4 top-4 z-10 glass rounded-xl px-3 py-2 text-xs text-slate-300"><span class="text-cyan-300">●</span> LIVE SIMULATION <span class="ml-2 text-slate-500">/ TOUCH TO ORBIT</span></div>
+        <div id="loading" class="absolute inset-0 z-20 flex items-center justify-center bg-slate-950 text-sm text-cyan-300">Loading 3D robot…</div>
+      </div>
+      <div class="glass flex flex-wrap items-center justify-between gap-3 border-x-0 border-b-0 p-4">
+        <div class="min-w-0 flex-1">
+          <p class="mini">Weld operation</p>
+          <p id="status" class="mt-1 text-sm font-semibold">Preparing robot…</p>
+          <div class="mt-3 h-1.5 w-full max-w-sm overflow-hidden rounded-full bg-slate-700"><div id="progress" class="h-full w-0 rounded-full bg-cyan-400"></div></div>
+        </div>
+        <div class="flex flex-wrap gap-2">
+          <button id="play" class="pill" type="button">⏸ Pause</button>
+          <button id="replay" class="pill" type="button">↻ Replay</button>
+          <button id="resetCamera" class="pill" type="button">◎ View</button>
+        </div>
+      </div>
+    </div>
+    <div class="mt-5 grid gap-3 sm:grid-cols-3">
+      <div class="glass rounded-2xl p-4"><p class="mini">Workpiece</p><p class="mt-1 text-xl font-black">Aleš <span class="text-orange-400">✦</span></p><p class="mt-1 text-xs text-slate-400">Four letters, including š caron</p></div>
+      <div class="glass rounded-2xl p-4"><p class="mini">Robot configuration</p><p class="mt-1 text-xl font-black">6 DOF</p><p class="mt-1 text-xs text-slate-400">Six articulated rotational joints</p></div>
+      <div class="glass rounded-2xl p-4"><p class="mini">Controls</p><p class="mt-1 text-xl font-black">Touch + Drag</p><p class="mt-1 text-xs text-slate-400">Orbit with one finger · pinch to zoom</p></div>
+    </div>
+    <p class="mt-5 text-center text-xs text-slate-500">Browser-based 3D visualization • Not a real robot control program or production welding simulation</p>
   </main>
-  <script>
-    document.getElementById("helloButton").addEventListener("click", () => {
-      document.getElementById("message").textContent = "It works! 🎉";
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+    const host=document.getElementById('viewport'), status=document.getElementById('status');
+    const progress=document.getElementById('progress'), play=document.getElementById('play');
+    const scene=new THREE.Scene(); scene.background=new THREE.Color(0x08111f);
+    scene.fog=new THREE.Fog(0x08111f,11,22);
+    const camera=new THREE.PerspectiveCamera(45,1,.1,80);
+    const initialCamera=new THREE.Vector3(6.5,6.8,8.6);
+    camera.position.copy(initialCamera);
+    const renderer=new THREE.WebGLRenderer({antialias:true,alpha:false,powerPreference:'high-performance'});
+    renderer.setPixelRatio(Math.min(devicePixelRatio||1,1.8));
+    renderer.outputColorSpace=THREE.SRGBColorSpace;
+    renderer.toneMapping=THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure=1.45;
+    host.appendChild(renderer.domElement);
+    const controls=new OrbitControls(camera,renderer.domElement);
+    controls.target.set(.05,.6,.0); controls.enableDamping=true;
+    controls.minDistance=4.3; controls.maxDistance=16;
+    controls.maxPolarAngle=Math.PI*.48;
+
+    scene.add(new THREE.HemisphereLight(0x9fd8ff,0x16213a,2.2));
+    const key=new THREE.DirectionalLight(0xffffff,3.0); key.position.set(-3,8,5);scene.add(key);
+    const rim=new THREE.PointLight(0x00bfff,75,12);rim.position.set(1,4,-3);scene.add(rim);
+
+    const mat=(c,metalness=.5,roughness=.37)=>new THREE.MeshStandardMaterial({color:c,metalness,roughness});
+    const orange=mat(0xf7a12d,.35,.35), dark=mat(0x202c40,.65,.35), joint=mat(0x445872,.78,.26);
+    const steel=mat(0x8698aa,.85,.26), cyan=new THREE.MeshStandardMaterial({color:0x39dfff,emissive:0x06b7e0,emissiveIntensity:1.8});
+    const weldMat=new THREE.LineBasicMaterial({color:0x63edff});
+    const floor=new THREE.Mesh(new THREE.PlaneGeometry(200,200),mat(0x0b1523,.15,.92));
+    floor.rotation.x=-Math.PI/2;floor.position.y=-.08;scene.add(floor);
+    const grid=new THREE.GridHelper(18,36,0x23425a,0x142637);grid.position.y=-.065;scene.add(grid);
+    function box(group,w,h,d,m,x=0,y=0,z=0){
+      const o=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),m);o.position.set(x,y,z);group.add(o);return o;
+    }
+    function cyl(group,r1,r2,h,m,x=0,y=0,z=0){
+      const o=new THREE.Mesh(new THREE.CylinderGeometry(r1,r2,h,16),m);o.position.set(x,y,z);group.add(o);return o;
+    }
+    const table=new THREE.Group();scene.add(table);
+    box(table,5.6,.12,2.5,steel,.55,.035,.5);
+    box(table,5.8,.12,2.7,dark,.55,-.07,.5);
+    [[-1.85,-.55],[2.85,-.55],[-1.85,1.55],[2.85,1.55]].forEach(([x,z])=>cyl(table,.08,.08,.025,orange,x,.107,z));
+    // Six rotational joints: base yaw, shoulder, elbow, wrist pitch, wrist swivel, torch spin.
+    const bx=-2.75,bz=-1.95, shoulderY=1.1,L1=2.92,L2=2.76;
+    cyl(scene,.62,.67,.24,dark,bx,.04,bz);
+    const base=new THREE.Group();base.position.set(bx,.16,bz);scene.add(base);
+    cyl(base,.37,.44,.45,orange,0,.22,0);
+    cyl(base,.29,.29,.1,joint,0,.49,0);
+    const shoulder=new THREE.Group();shoulder.position.y=shoulderY-.16;base.add(shoulder);
+    cyl(shoulder,.3,.3,.45,dark);
+    const upper=new THREE.Group();shoulder.add(upper);
+    box(upper,.39,L1,.47,orange,0,L1/2,0);
+    box(upper,.43,.53,.51,dark,0,L1*.72,0);
+    const elbow=new THREE.Group();elbow.position.y=L1;upper.add(elbow);
+    cyl(elbow,.32,.32,.52,joint);
+    const forearm=new THREE.Group();elbow.add(forearm);
+    box(forearm,.3,L2,.37,orange,0,L2/2,0);
+    box(forearm,.34,.54,.42,dark,0,L2*.72,0);
+    const wrist=new THREE.Group();wrist.position.y=L2;forearm.add(wrist);
+    const pitch=new THREE.Group();wrist.add(pitch);
+    cyl(pitch,.25,.25,.32,joint);
+    const swivel=new THREE.Group();pitch.add(swivel);
+    cyl(swivel,.19,.19,.23,orange,0,-.13,0);
+    const spin=new THREE.Group();swivel.add(spin);
+    cyl(spin,.14,.2,.17,dark,0,-.29,0);
+    cyl(spin,.045,.11,.38,steel,0,-.53,0);
+    const tip=new THREE.Mesh(new THREE.ConeGeometry(.075,.17,12),cyan);
+    tip.rotation.x=Math.PI;tip.position.y=-.76;spin.add(tip);
+    const torchLight=new THREE.PointLight(0x59dcff,0,2.4);spin.add(torchLight);torchLight.position.set(0,-.75,0);
+
+    // Stroke coordinates (0..1). The caron above the s makes the Slovenian š.
+    const glyphs=[
+      {w:.95,paths:[[[0,0],[.5,1],[1,0]],[[.24,.42],[.76,.42]]]},
+      {w:.26,paths:[[[.6,1],[.6,0]]]},
+      {w:.86,paths:[[[.98,.45],[.1,.45],[.2,.7],[.55,.8],[.9,.62],[.98,.43],[.45,.34],[.12,.24],[.35,.04],[.72,0],[1,.14]]]},
+      {w:.82,paths:[[[.92,.77],[.59,.86],[.2,.77],[.09,.57],[.4,.45],[.75,.36],[.94,.18],[.72,.02],[.3,0],[.05,.12]],[[.22,1.17],[.5,1.04],[.78,1.17]]]}
+    ];
+    const strokes=[];let cursor=-1.55;const scale=.94, z0=.96, zScale=1.05;
+    for(const glyph of glyphs){
+      for(const path of glyph.paths){
+        const pts=path.map(([u,v])=>new THREE.Vector3(cursor+u*glyph.w*scale,.14,z0-v*zScale));
+        for(let i=1;i<pts.length;i++){
+          const a=pts[i-1],b=pts[i],n=Math.max(2,Math.ceil(a.distanceTo(b)/.035));
+          const trail=[];for(let j=0;j<=n;j++)trail.push(a.clone().lerp(b,j/n));
+          strokes.push(trail);
+        }
+      }
+      cursor+=glyph.w*scale+.22;
+    }
+    // Drawn weld remains visible after the torch has passed.
+    const all=strokes.flat();const positions=new Float32Array(all.length*3);
+    all.forEach((p,i)=>{positions[3*i]=p.x;positions[3*i+1]=p.y;positions[3*i+2]=p.z;});
+    const weldGeom=new THREE.BufferGeometry();
+    weldGeom.setAttribute('position',new THREE.BufferAttribute(positions,3));
+    weldGeom.setDrawRange(0,0);
+    const weldLine=new THREE.Line(weldGeom,weldMat);scene.add(weldLine);
+    const glowGeom=weldGeom.clone();
+    const glowLine=new THREE.Line(glowGeom,new THREE.LineBasicMaterial({color:0x049bc7,transparent:true,opacity:.35}));
+    glowLine.position.y=.008;scene.add(glowLine);
+    const sparks=[];const sparkGeo=new THREE.SphereGeometry(.025,5,4);
+    const sparkMat=new THREE.MeshBasicMaterial({color:0xffac4b});
+    for(let i=0;i<26;i++){const p=new THREE.Mesh(sparkGeo,sparkMat);p.visible=false;scene.add(p);sparks.push({mesh:p,life:0,velocity:new THREE.Vector3()});}
+    let running=true,step=0,acc=0,elapsed=0;
+    let cumulative=[];let n=0;
+    strokes.forEach(s=>{cumulative.push(n);n+=s.length;});
+    const total=n;
+    const lift=.85,center=new THREE.Vector3(0,.6,0);
+    function placeRobot(target,t){
+      const dx=target.x-bx,dz=target.z-bz;
+      const horizontal=Math.hypot(dx,dz);
+      base.rotation.y=Math.atan2(dx,dz);
+      const dy=target.y+.76-shoulderY;
+      const dist=Math.max(.15,Math.min(L1+L2-.015,Math.hypot(horizontal,dy)));
+      const alpha=Math.atan2(horizontal,dy);
+      const beta=Math.acos(THREE.MathUtils.clamp((L1*L1+dist*dist-L2*L2)/(2*L1*dist),-1,1));
+      const gamma=Math.acos(THREE.MathUtils.clamp((L2*L2+dist*dist-L1*L1)/(2*L2*dist),-1,1));
+      upper.rotation.x=alpha-beta;
+      forearm.rotation.x=beta+gamma;
+      pitch.rotation.x=-(alpha+gamma);
+      swivel.rotation.y=Math.sin(t*1.7)*.18;
+      spin.rotation.y=t*.6;
+    }
+    function randomSpark(at){
+      const s=sparks.find(x=>x.life<=0);if(!s)return;
+      s.life=.22+Math.random()*.34;s.mesh.visible=true;s.mesh.position.copy(at);
+      s.velocity.set((Math.random()-.5)*2.2,.7+Math.random()*1.7,(Math.random()-.5)*2.2);
+      s.mesh.scale.setScalar(.6+Math.random()*1.3);
+    }
+    function update(dt){
+      elapsed+=dt;
+      if(running){
+        acc+=dt*38;
+        while(acc>=1 && step<total){step++;acc--;}
+        if(step>=total){running=false;play.textContent='↻ Play again';}
+      }
+      let active=step<total && running;let target=all[Math.max(0,Math.min(step,total-1))].clone();
+      // Lift the torch between disconnected letter strokes.
+      let segmentIndex=0;
+      for(let i=0;i<cumulative.length;i++)if(cumulative[i]<=step)segmentIndex=i;
+      const offset=step-cumulative[segmentIndex];
+      if(offset<2 && segmentIndex>0 && active){target.y+=.16*(2-offset);}
+      if(step>=total){target=all[total-1].clone();target.y+=.35;}
+      placeRobot(target,elapsed);
+      weldGeom.setDrawRange(0,Math.min(step,total));
+      glowGeom.setDrawRange(0,Math.min(step,total));
+      torchLight.intensity=active?2.6+Math.random()*1.4:0;
+      tip.material.emissiveIntensity=active?2.8:0.4;
+      if(active && Math.random()<.75)randomSpark(target);
+      for(const s of sparks){
+        if(s.life<=0)continue;
+        s.life-=dt;s.mesh.position.addScaledVector(s.velocity,dt);s.velocity.y-=dt*5;
+        if(s.life<=0)s.mesh.visible=false;
+      }
+      const percentage=Math.min(100,Math.round(step/total*100));
+      progress.style.width=percentage+'%';
+      status.textContent=step>=total?'Weld complete — Aleš ✨':!running?'Paused at '+percentage+'%':'Welding “Aleš” — '+percentage+'%';
+    }
+    const clock=new THREE.Clock();
+    function resize(){
+      const w=host.clientWidth,h=host.clientHeight;
+      camera.aspect=w/h;camera.updateProjectionMatrix();renderer.setSize(w,h,false);
+    }
+    addEventListener('resize',resize);resize();
+    document.getElementById('loading').remove();
+    function frame(){requestAnimationFrame(frame);update(Math.min(clock.getDelta(),.04));controls.update();renderer.render(scene,camera);}
+    frame();
+    play.addEventListener('click',()=>{
+      if(step>=total){step=0;acc=0;running=true;}
+      else running=!running;
+      play.textContent=running?'⏸ Pause':'▶ Resume';
     });
+    document.getElementById('replay').addEventListener('click',()=>{step=0;acc=0;running=true;play.textContent='⏸ Pause';});
+    document.getElementById('resetCamera').addEventListener('click',()=>{camera.position.copy(initialCamera);controls.target.copy(center);controls.update();});
   </script>
 </body>
 </html>
