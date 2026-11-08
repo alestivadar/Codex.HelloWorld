@@ -120,18 +120,41 @@
       function line(x1,y1,x2,y2){ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.stroke();}
       function circle(x,y,r){ctx.beginPath();ctx.arc(x,y,r,0,Math.PI*2);}
       function ballArt(x,y,r,spin,ghost=false){
-        ctx.save();ctx.translate(x,y);ctx.rotate(spin);
+        ctx.save();
+        ctx.translate(x,y);
+        ctx.rotate(spin * 0.2);
         if(ghost)ctx.globalAlpha=.5;
-        const grad=ctx.createRadialGradient(-r*.4,-r*.5,r*.1,0,0,r);
-        grad.addColorStop(0,'#ffc06d');grad.addColorStop(.52,'#ed832d');grad.addColorStop(1,'#983b13');
-        ctx.fillStyle=grad;ctx.strokeStyle='#49220e';ctx.lineWidth=Math.max(1.6,r*.12);
+        // Little pink ears
+        ctx.fillStyle='#f7a8c2';
+        ctx.strokeStyle='#a54d72';
+        ctx.lineWidth=Math.max(1.2,r*.09);
+        for(const side of [-1,1]){
+          ctx.beginPath();
+          ctx.moveTo(side*r*.36,-r*.56);
+          ctx.lineTo(side*r*.83,-r*1.16);
+          ctx.lineTo(side*r*.10,-r*.86);
+          ctx.closePath();ctx.fill();ctx.stroke();
+          ctx.fillStyle='#f48fb1';
+          ctx.beginPath();
+          ctx.moveTo(side*r*.35,-r*.79);
+          ctx.lineTo(side*r*.68,-r*1.05);
+          ctx.lineTo(side*r*.22,-r*.90);
+          ctx.closePath();ctx.fill();
+          ctx.fillStyle='#f7a8c2';
+        }
+        // Piggy face
+        ctx.fillStyle='#f7a8c2';
         circle(0,0,r);ctx.fill();ctx.stroke();
-        ctx.save();circle(0,0,r);ctx.clip();
-        ctx.strokeStyle='#422415';ctx.lineWidth=Math.max(1.4,r*.13);
-        line(-r,0,r,0);line(0,-r,0,r);
-        ctx.beginPath();ctx.ellipse(-r*.75,0,r*.9,r*.6,0,-1.35,1.35);ctx.stroke();
-        ctx.beginPath();ctx.ellipse(r*.75,0,r*.9,r*.6,0,1.8,4.5);ctx.stroke();
-        ctx.restore();ctx.restore();
+        ctx.fillStyle='#2b1d24';
+        circle(-r*.33,-r*.19,r*.095);ctx.fill();
+        circle(r*.33,-r*.19,r*.095);ctx.fill();
+        ctx.fillStyle='#f48fb1';
+        ctx.beginPath();ctx.ellipse(0,r*.22,r*.43,r*.29,0,0,Math.PI*2);
+        ctx.fill();ctx.stroke();
+        ctx.fillStyle='#8b3d5c';
+        ctx.beginPath();ctx.ellipse(-r*.13,r*.22,r*.065,r*.10,0,0,Math.PI*2);ctx.fill();
+        ctx.beginPath();ctx.ellipse(r*.13,r*.22,r*.065,r*.10,0,0,Math.PI*2);ctx.fill();
+        ctx.restore();
       }
       function draw(){
         ctx.setTransform(dpr,0,0,dpr,0,0);
