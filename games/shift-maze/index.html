@@ -35,163 +35,176 @@ canvas{display:block;width:100%;height:100%;touch-action:none}
 (()=>{
 'use strict';
 const board=document.getElementById('board'),canvas=document.getElementById('maze'),ctx=canvas.getContext('2d'),hud=document.getElementById('hud'),g=hud.getContext('2d'),stick=document.getElementById('stick'),knob=document.getElementById('knob'),announce=document.getElementById('announce');
-let W=0,H=0,cols=11,rows=15,tileW=1,tileH=1,grid=[],px=1.5,py=1.5,goal={x:9,y:13},joystick={x:0,y:0},pointer=null,keys=new Set(),elapsed=0,celebrate=0,particles=[],last=0;
-const PERIOD=10, WARNING=3;
-const dirs=[[0,-2],[2,0],[0,2],[-2,0]];
+const N=1,E=2,S=4,WEST=8,PERIOD=10,WARNING=3;
+const directions=[[0,-1,N,S],[1,0,E,WEST],[0,1,S,N],[-1,0,WEST,E]];
 const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
-function isWall(x,y){return x<0||y<0||x>=cols||y>=rows||grid[Math.floor(y)*cols+Math.floor(x)]===1;}
-function carveMaze(){
-  grid=new Uint8Array(cols*rows).fill(1);
-  const index=(x,y)=>y*cols+x;
-  const stack=[[1,1]];
-  grid[index(1,1)]=0;
+let width=0,height=0,cols=17,rows=23,tileW=1,tileH=1,walls=new Uint8Array(0);
+let player={x:.5,y:.5},goal={x:16.5,y:22.5};
+let joystick={x:0,y:0},pointer=null,keys=new Set(),elapsed=0,celebrate=0,particles=[],last=0;
+const cell=(x,y)=>y*cols+x,inside=(x,y)=>x>=0&&y>=0&&x<cols&&y<rows;
+function generateMaze(){
+  // A perfect spanning-tree maze connects every cell, so both the player's
+  // current cell and the fixed goal remain reachable after every reshuffle.
+  walls=new Uint8Array(cols*rows).fill(15);
+  const visited=new Uint8Array(cols*rows);
+  const startX=clamp(Math.floor(player.x),0,cols-1),startY=clamp(Math.floor(player.y),0,rows-1);
+  const stack=[[startX,startY]];
+  visited[cell(startX,startY)]=1;
   while(stack.length){
     const [x,y]=stack[stack.length-1];
-    const options=dirs.filter(([dx,dy])=>x+dx>0&&x+dx<cols-1&&y+dy>0&&y+dy<rows-1&&grid[index(x+dx,y+dy)]===1);
+    const options=directions.filter(([dx,dy])=>inside(x+dx,y+dy)&&!visited[cell(x+dx,y+dy)]);
     if(!options.length){stack.pop();continue;}
-    const [dx,dy]=options[Math.floor(Math.random()*options.length)];
-    grid[index(x+dx/2,y+dy/2)]=0;
-    grid[index(x+dx,y+dy)]=0;
-    stack.push([x+dx,y+dy]);
+    const [dx,dy,bit,opposite]=options[Math.floor(Math.random()*options.length)];
+    const nx=x+dx,ny=y+dy;
+    walls[cell(x,y)]&=~bit;
+    walls[cell(nx,ny)]&=~opposite;
+    visited[cell(nx,ny)]=1;stack.push([nx,ny]);
   }
-  // A few extra doors create shorter, varied paths while preserving reachability.
-  for(let y=2;y<rows-2;y++)for(let x=2;x<cols-2;x++){
-    if(grid[index(x,y)]===1&&Math.random()<.17){
-      const horizontal=grid[index(x-1,y)]===0&&grid[index(x+1,y)]===0;
-      const vertical=grid[index(x,y-1)]===0&&grid[index(x,y+1)]===0;
-      if(horizontal||vertical)grid[index(x,y)]=0;
-    }
+  // A few shortcuts make the labyrinth feel different and less predictable.
+  for(let y=1;y<rows-1;y++)for(let x=1;x<cols-1;x++){
+    if(Math.random()>.035)continue;
+    const dir=Math.random()<.5?directions[1]:directions[2];
+    const [dx,dy,bit,opposite]=dir,nx=x+dx,ny=y+dy;
+    walls[cell(x,y)]&=~bit;
+    walls[cell(nx,ny)]&=~opposite;
   }
-  // Choose a reachable destination on the opposite side.
-  const dist=new Int32Array(cols*rows).fill(-1),queue=[[1,1]];
-  dist[index(1,1)]=0;
-  for(let k=0;k<queue.length;k++){
-    const [x,y]=queue[k];
-    for(const [dx,dy] of [[0,1],[1,0],[0,-1],[-1,0]]){
-      const nx=x+dx,ny=y+dy;
-      if(nx<0||ny<0||nx>=cols||ny>=rows||grid[index(nx,ny)]||dist[index(nx,ny)]!==-1)continue;
-      dist[index(nx,ny)]=dist[index(x,y)]+1;queue.push([nx,ny]);
-    }
-  }
-  let choices=queue.filter(([x,y])=>x>cols*.54&&y>rows*.50);
-  if(!choices.length)choices=queue.filter(([x,y])=>dist[index(x,y)]>5);
-  choices.sort((a,b)=>dist[index(b[0],b[1])]-dist[index(a[0],a[1])]);
-  const choice=choices[Math.floor(Math.random()*Math.max(1,Math.min(5,choices.length)))]||queue[queue.length-1];
-  goal={x:choice[0]+.5,y:choice[1]+.5};
-  px=1.5;py=1.5;elapsed=0;celebrate=0;particles=[];
+  elapsed=0;
 }
 function resize(){
-  const rect=board.getBoundingClientRect();
-  W=Math.max(150,rect.width);H=Math.max(150,rect.height);
-  const dpr=Math.min(2,window.devicePixelRatio||1);
-  canvas.width=Math.round(W*dpr);canvas.height=Math.round(H*dpr);
+  const oldCols=cols,oldRows=rows;
+  const box=board.getBoundingClientRect();
+  width=Math.max(140,box.width);height=Math.max(140,box.height);
+  const dpr=Math.min(window.devicePixelRatio||1,2);
+  canvas.width=Math.round(width*dpr);canvas.height=Math.round(height*dpr);
   ctx.setTransform(dpr,0,0,dpr,0,0);
-  // Odd grid dimensions. Tile shape remains square so collision/motion feel consistent.
-  const base=11;
-  cols=base;
-  rows=clamp(Math.round((H/W)*base)|1,11,29);
-  if(rows%2===0)rows++;
-  tileW=W/cols;tileH=H/rows;
-  carveMaze();
+  // Many small cells and hairline walls, not the previous block-thick walls.
+  cols=width<390?17:19;
+  rows=clamp(Math.round(cols*height/width),17,39);
+  tileW=width/cols;tileH=height/rows;
+  if(oldCols>0&&oldRows>0&&walls.length){
+    player.x=clamp(player.x/oldCols*cols,.5,cols-.5);
+    player.y=clamp(player.y/oldRows*rows,.5,rows-.5);
+  }else{player={x:.5,y:.5};}
+  goal={x:cols-.5,y:rows-.5};
+  generateMaze();
 }
-function canMove(x,y){
-  const r=.24;
-  return !isWall(x-r,y-r)&&!isWall(x+r,y-r)&&!isWall(x-r,y+r)&&!isWall(x+r,y+r);
-}
-function movement(dt){
-  let vx=joystick.x,vy=joystick.y;
-  if(keys.has('arrowleft')||keys.has('a'))vx-=1;
-  if(keys.has('arrowright')||keys.has('d'))vx+=1;
-  if(keys.has('arrowup')||keys.has('w'))vy-=1;
-  if(keys.has('arrowdown')||keys.has('s'))vy+=1;
-  const mag=Math.hypot(vx,vy);
-  if(mag>.01){vx/=Math.max(1,mag);vy/=Math.max(1,mag);}
-  const speed=5.0,dx=vx*dt*speed,dy=vy*dt*speed;
-  // Axis-separated collision lets the character slide smoothly along walls.
-  if(canMove(px+dx,py))px+=dx;
-  if(canMove(px,py+dy))py+=dy;
-}
-function strokeCircle(x,y,r,color){ctx.beginPath();ctx.arc(x,y,r,0,Math.PI*2);ctx.fillStyle=color;ctx.fill();}
-function draw(){
-  const timeLeft=PERIOD-elapsed;
-  const warn=clamp((WARNING-timeLeft)/WARNING,0,1);
-  // Smooth white-to-red warning over the final three seconds.
-  const blend=warn*warn*(3-2*warn);
-  const red=Math.round(250-23*blend),green=Math.round(252-190*blend),blue=Math.round(255-185*blend);
-  ctx.fillStyle='rgb('+red+','+green+','+blue+')';ctx.fillRect(0,0,W,H);
-  const margin=0;
-  const inset=Math.max(1,Math.min(tileW,tileH)*.035);
-  for(let y=0;y<rows;y++)for(let x=0;x<cols;x++){
-    if(grid[y*cols+x]!==1)continue;
-    const cellX=x*tileW,cellY=y*tileH;
-    ctx.fillStyle=warn>.5?'#341c31':'#172f49';
-    ctx.fillRect(cellX+margin,cellY+margin,tileW+inset,tileH+inset);
-    ctx.fillStyle=warn>.5?'#704255':'#2d5472';
-    ctx.fillRect(cellX+inset,cellY+inset,tileW-inset*2,Math.max(2,tileH*.07));
+function hitsWall(x,y,r){
+  const minX=Math.max(0,Math.floor(x-r)-1),maxX=Math.min(cols-1,Math.floor(x+r)+1);
+  const minY=Math.max(0,Math.floor(y-r)-1),maxY=Math.min(rows-1,Math.floor(y+r)+1);
+  // Shortest distance from a circle center to each maze wall segment.
+  function touches(ax,ay,bx,by){
+    const dx=bx-ax,dy=by-ay,lengthSq=dx*dx+dy*dy;
+    const t=clamp(((x-ax)*dx+(y-ay)*dy)/lengthSq,0,1);
+    return Math.hypot(x-(ax+t*dx),y-(ay+t*dy))<r;
   }
-  const gx=goal.x*tileW,gy=goal.y*tileH;
-  const glow=ctx.createRadialGradient(gx,gy,1,gx,gy,Math.min(tileW,tileH)*1.3);
-  glow.addColorStop(0,'#57ff9a99');glow.addColorStop(1,'#57ff9a00');
-  ctx.fillStyle=glow;ctx.beginPath();ctx.arc(gx,gy,Math.min(tileW,tileH)*1.3,0,Math.PI*2);ctx.fill();
-  strokeCircle(gx,gy,Math.min(tileW,tileH)*.36,'#0a9862');
-  strokeCircle(gx,gy,Math.min(tileW,tileH)*.22,'#75ffc6');
-  // Small animated player with an inner highlight.
-  const radius=Math.min(tileW,tileH)*.29;
-  ctx.shadowColor='#00b5ff';ctx.shadowBlur=14;
-  strokeCircle(px*tileW,py*tileH,radius,'#047bbd');
-  ctx.shadowBlur=0;
-  strokeCircle(px*tileW-radius*.19,py*tileH-radius*.24,radius*.48,'#b7f3ff');
-  for(const p of particles){ctx.globalAlpha=Math.max(0,p.life);strokeCircle(p.x,p.y,p.r,p.color);}
+  for(let cy=minY;cy<=maxY;cy++)for(let cx=minX;cx<=maxX;cx++){
+    const mask=walls[cell(cx,cy)];
+    if(mask&N && touches(cx,cy,cx+1,cy))return true;
+    if(mask&WEST && touches(cx,cy,cx,cy+1))return true;
+    if(cx===cols-1&&(mask&E)&&touches(cx+1,cy,cx+1,cy+1))return true;
+    if(cy===rows-1&&(mask&S)&&touches(cx,cy+1,cx+1,cy+1))return true;
+  }
+  return false;
+}
+function move(dt){
+  let vx=joystick.x,vy=joystick.y;
+  if(keys.has('arrowleft')||keys.has('a'))vx--;
+  if(keys.has('arrowright')||keys.has('d'))vx++;
+  if(keys.has('arrowup')||keys.has('w'))vy--;
+  if(keys.has('arrowdown')||keys.has('s'))vy++;
+  const magnitude=Math.hypot(vx,vy);
+  if(magnitude<.03)return;
+  vx/=Math.max(1,magnitude);vy/=Math.max(1,magnitude);
+  const speed=5.6,r=.22;
+  // Substeps avoid crossing a wall when a phone has a slow animation frame.
+  const dx=vx*speed*dt,dy=vy*speed*dt,steps=Math.max(1,Math.ceil(Math.hypot(dx,dy)/.08));
+  for(let n=0;n<steps;n++){
+    if(!hitsWall(player.x+dx/steps,player.y,r))player.x+=dx/steps;
+    if(!hitsWall(player.x,player.y+dy/steps,r))player.y+=dy/steps;
+  }
+}
+function disc(x,y,r,color){ctx.beginPath();ctx.arc(x,y,r,0,Math.PI*2);ctx.fillStyle=color;ctx.fill();}
+function draw(){
+  const left=clamp(PERIOD-elapsed,0,PERIOD);
+  const warning=clamp((WARNING-left)/WARNING,0,1),mix=warning*warning*(3-2*warning);
+  // Visible floor gradually shifts from near-white to vivid red.
+  const red=Math.round(250+5*mix),green=Math.round(251-182*mix),blue=Math.round(253-187*mix);
+  ctx.fillStyle='rgb('+red+','+green+','+blue+')';ctx.fillRect(0,0,width,height);
+  ctx.strokeStyle=warning>.5?'#4e1830':'#1c3653';
+  ctx.lineWidth=clamp(Math.min(tileW,tileH)*.105,1.5,3.0);
+  ctx.lineCap='square';ctx.lineJoin='miter';
+  ctx.beginPath();
+  for(let y=0;y<rows;y++)for(let x=0;x<cols;x++){
+    const mask=walls[cell(x,y)];
+    const lx=x*tileW,ty=y*tileH,rx=(x+1)*tileW,by=(y+1)*tileH;
+    if(mask&N){ctx.moveTo(lx,ty);ctx.lineTo(rx,ty);}
+    if(mask&WEST){ctx.moveTo(lx,ty);ctx.lineTo(lx,by);}
+    if(x===cols-1&&(mask&E)){ctx.moveTo(rx,ty);ctx.lineTo(rx,by);}
+    if(y===rows-1&&(mask&S)){ctx.moveTo(lx,by);ctx.lineTo(rx,by);}
+  }
+  ctx.stroke();
+  const gx=goal.x*tileW,gy=goal.y*tileH,r=Math.min(tileW,tileH);
+  const halo=ctx.createRadialGradient(gx,gy,1,gx,gy,r*.9);
+  halo.addColorStop(0,'#16ff83a9');halo.addColorStop(1,'#16ff8300');
+  ctx.fillStyle=halo;ctx.beginPath();ctx.arc(gx,gy,r*.9,0,Math.PI*2);ctx.fill();
+  disc(gx,gy,r*.27,'#03975d');disc(gx,gy,r*.15,'#8effc4');
+  const pr=r*.27;
+  ctx.shadowBlur=10;ctx.shadowColor='#00abed';
+  disc(player.x*tileW,player.y*tileH,pr,'#078acb');
+  ctx.shadowBlur=0;disc(player.x*tileW-pr*.18,player.y*tileH-pr*.22,pr*.43,'#bef3ff');
+  for(const p of particles){ctx.globalAlpha=clamp(p.life,0,1);disc(p.x,p.y,p.r,p.color);}
   ctx.globalAlpha=1;
+  // Icon-only circular countdown; no on-screen text.
   g.clearRect(0,0,100,100);
-  g.beginPath();g.arc(50,50,38,-Math.PI/2,Math.PI*1.5);
-  g.lineWidth=10;g.strokeStyle='#112e43';g.stroke();
-  g.beginPath();g.arc(50,50,38,-Math.PI/2,-Math.PI/2+Math.PI*2*(timeLeft/PERIOD));
-  g.strokeStyle=warn>.01?'#ff3458':'#24b7de';g.lineCap='round';g.stroke();
-  g.beginPath();g.arc(50,50,24,0,Math.PI*2);g.fillStyle='#fff';g.fill();
+  g.beginPath();g.arc(50,50,38,0,Math.PI*2);g.lineWidth=10;g.strokeStyle='#142c43';g.stroke();
+  g.beginPath();g.arc(50,50,38,-Math.PI/2,-Math.PI/2+2*Math.PI*left/PERIOD);
+  g.lineWidth=10;g.lineCap='round';g.strokeStyle=warning>0?'#f43f5e':'#06a9d4';g.stroke();
+  g.beginPath();g.arc(50,50,23,0,2*Math.PI);g.fillStyle='#ffffff';g.fill();
 }
 function update(dt){
   if(celebrate>0){
     celebrate-=dt;
-    if(celebrate<=0){carveMaze();announce.textContent='New maze';}
+    if(celebrate<=0){
+      // A successful run starts again, unlike an ordinary 10-second shift.
+      player={x:.5,y:.5};generateMaze();
+    }
   }else{
-    movement(dt);
+    move(dt);
     elapsed+=dt;
-    if(Math.hypot(px-goal.x,py-goal.y)<.43){
-      celebrate=.8;
-      announce.textContent='Goal reached';
-      for(let i=0;i<30;i++)particles.push({x:goal.x*tileW,y:goal.y*tileH,vx:(Math.random()-.5)*210,vy:(Math.random()-.5)*210,r:2+Math.random()*5,life:1,color:i%2?'#0a9862':'#ffbd4b'});
+    if(Math.hypot(player.x-goal.x,player.y-goal.y)<.34){
+      celebrate=.85;announce.textContent='Finish reached';
+      for(let i=0;i<24;i++)particles.push({x:goal.x*tileW,y:goal.y*tileH,vx:(Math.random()-.5)*130,vy:(Math.random()-.5)*130,r:2+Math.random()*3,life:1,color:i%2?'#34d399':'#fbbf24'});
     }else if(elapsed>=PERIOD){
-      carveMaze();announce.textContent='Maze changed';
+      // The goal and player coordinates deliberately stay untouched.
+      generateMaze();announce.textContent='Maze changed';
     }
   }
-  particles.forEach(p=>{p.x+=p.vx*dt;p.y+=p.vy*dt;p.life-=dt*1.4;});
+  for(const p of particles){p.x+=p.vx*dt;p.y+=p.vy*dt;p.life-=dt;}
   particles=particles.filter(p=>p.life>0);
 }
-function stickMove(e){
-  const b=stick.getBoundingClientRect(),cx=b.left+b.width/2,cy=b.top+b.height/2;
-  const dx=e.clientX-cx,dy=e.clientY-cy,max=b.width*.32,length=Math.hypot(dx,dy);
-  const n=Math.min(length,max)/Math.max(length,.001);
-  const x=dx*n,y=dy*n;
-  joystick={x:x/max,y:y/max};
+function setStick(e){
+  const rect=stick.getBoundingClientRect(),cx=rect.left+rect.width/2,cy=rect.top+rect.height/2;
+  const dx=e.clientX-cx,dy=e.clientY-cy,limit=rect.width*.32;
+  const factor=Math.min(1,limit/Math.max(1,Math.hypot(dx,dy)));
+  const x=dx*factor,y=dy*factor;
+  joystick={x:x/limit,y:y/limit};
   knob.style.transform='translate(calc(-50% + '+x+'px),calc(-50% + '+y+'px))';
 }
 function release(e){
-  if(pointer===null||(e&&e.pointerId!==pointer))return;
-  pointer=null;joystick={x:0,y:0};
-  knob.style.transform='translate(-50%,-50%)';
+  if(pointer===null||(e&&pointer!==e.pointerId))return;
+  pointer=null;joystick={x:0,y:0};knob.style.transform='translate(-50%,-50%)';
 }
-stick.addEventListener('pointerdown',e=>{if(pointer!==null)return;pointer=e.pointerId;stick.setPointerCapture(e.pointerId);stickMove(e);e.preventDefault();});
-stick.addEventListener('pointermove',e=>{if(pointer===e.pointerId){stickMove(e);e.preventDefault();}});
+stick.addEventListener('pointerdown',e=>{if(pointer!==null)return;pointer=e.pointerId;stick.setPointerCapture(e.pointerId);setStick(e);e.preventDefault();});
+stick.addEventListener('pointermove',e=>{if(e.pointerId===pointer){setStick(e);e.preventDefault();}});
 stick.addEventListener('pointerup',release);
 stick.addEventListener('pointercancel',release);
 stick.addEventListener('lostpointercapture',()=>release(null));
 window.addEventListener('keydown',e=>{const key=e.key.toLowerCase();if(['arrowup','arrowdown','arrowleft','arrowright','w','a','s','d'].includes(key)){keys.add(key);e.preventDefault();}});
 window.addEventListener('keyup',e=>keys.delete(e.key.toLowerCase()));
-window.addEventListener('blur',()=>keys.clear());
-const observer=new ResizeObserver(()=>resize());observer.observe(board);
+window.addEventListener('blur',()=>{keys.clear();release(null);});
+new ResizeObserver(resize).observe(board);
 resize();
-function frame(now){const dt=Math.min(.04,(now-last)/1000||.016);last=now;update(dt);draw();requestAnimationFrame(frame);}
+function frame(t){const dt=Math.min(.04,(t-last)/1000||.016);last=t;update(dt);draw();requestAnimationFrame(frame);}
 requestAnimationFrame(frame);
 })();
 </script>
