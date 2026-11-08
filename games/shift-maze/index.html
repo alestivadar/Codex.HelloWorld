@@ -13,14 +13,17 @@ body{display:flex;justify-content:center;align-items:center;font-family:system-u
 #board{flex:1;min-height:0;position:relative;overflow:hidden;touch-action:none;background:#fafafa}
 canvas{display:block;width:100%;height:100%;touch-action:none}
 #hud{position:absolute;right:12px;top:12px;width:42px;height:42px;pointer-events:none;filter:drop-shadow(0 3px 5px #0004)}
-#controls{height:clamp(126px,21dvh,166px);flex-shrink:0;display:flex;align-items:center;justify-content:center;background:#0d1a28;box-shadow:0 -5px 15px #0002;touch-action:none;padding-bottom:env(safe-area-inset-bottom,0px)}
+#controls{height:clamp(126px,21dvh,166px);flex-shrink:0;display:flex;align-items:center;justify-content:center;background:#0d1a28;box-shadow:0 -5px 15px #0002;touch-action:none;padding-bottom:env(safe-area-inset-bottom,0px);position:relative}
 #stick{position:relative;width:116px;height:116px;border-radius:50%;background:radial-gradient(circle,#243e54,#14283a);border:2px solid #52718a;box-shadow:inset 0 7px 20px #0006,0 8px 18px #0004;touch-action:none;user-select:none;-webkit-user-select:none}
 #stick:before,#stick:after{content:"";position:absolute;pointer-events:none;background:#87aac055}
 #stick:before{height:1px;width:80%;top:50%;left:10%}#stick:after{width:1px;height:80%;left:50%;top:10%}
 #knob{position:absolute;left:50%;top:50%;width:57px;height:57px;border-radius:50%;transform:translate(-50%,-50%);background:radial-gradient(circle at 34% 28%,#b4eaff,#2c87b8 67%,#1a4c76);border:3px solid #92d8f7;box-shadow:0 6px 16px #0007;pointer-events:none}
+#blast{position:absolute;right:clamp(12px,6%,36px);top:50%;transform:translateY(-50%);width:72px;height:72px;display:grid;place-items:center;border-radius:50%;border:2px solid #ffb35f;background:radial-gradient(circle at 35% 25%,#ef9b3c,#a23e20);box-shadow:0 5px 18px #0008;color:#fff;font-size:30px;touch-action:manipulation;cursor:pointer}
+#blast:active{transform:translateY(-50%) scale(.94)}#blast:disabled{opacity:.35;filter:grayscale(1);cursor:default}
+#ammo{position:absolute;bottom:-15px;display:flex;gap:8px}#ammo i{width:10px;height:10px;border-radius:50%;background:#ffb35f;box-shadow:0 0 7px #ffc86b}#ammo i.empty{background:#526170;box-shadow:none}
 #announce{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap}
 @media(min-width:700px){#game{height:min(840px,calc(100dvh - 24px));border:1px solid #2a4c65;border-radius:18px;box-shadow:0 24px 65px #0009}}
-@media(max-height:510px){#controls{height:100px}#stick{width:86px;height:86px}#knob{width:44px;height:44px}#hud{width:32px;height:32px}}
+@media(max-height:510px){#controls{height:100px}#stick{width:86px;height:86px}#knob{width:44px;height:44px}#hud{width:32px;height:32px}#blast{width:57px;height:57px;font-size:24px}}
 </style>
 </head>
 <body>
@@ -28,19 +31,19 @@ canvas{display:block;width:100%;height:100%;touch-action:none}
 <div id="board" aria-label="Random maze. Guide the blue player to the glowing green destination.">
 <canvas id="maze"></canvas><canvas id="hud" width="100" height="100" aria-hidden="true"></canvas>
 </div>
-<div id="controls"><div id="stick" role="group" aria-label="Movement joystick"><div id="knob"></div></div></div>
+<div id="controls"><div id="stick" role="group" aria-label="Movement joystick"><div id="knob"></div></div><button id="blast" type="button" aria-label="Explode nearby walls, 2 charges remaining">💥<span id="ammo" aria-hidden="true"><i></i><i></i></span></button></div>
 <div id="announce" role="status" aria-live="polite"></div>
 </main>
 <script>
 (()=>{
 'use strict';
-const board=document.getElementById('board'),canvas=document.getElementById('maze'),ctx=canvas.getContext('2d'),hud=document.getElementById('hud'),g=hud.getContext('2d'),stick=document.getElementById('stick'),knob=document.getElementById('knob'),announce=document.getElementById('announce');
+const board=document.getElementById('board'),canvas=document.getElementById('maze'),ctx=canvas.getContext('2d'),hud=document.getElementById('hud'),g=hud.getContext('2d'),stick=document.getElementById('stick'),knob=document.getElementById('knob'),blast=document.getElementById('blast'),ammoDisplay=document.getElementById('ammo'),announce=document.getElementById('announce');
 const N=1,E=2,S=4,WEST=8,PERIOD=10,WARNING=3;
 const directions=[[0,-1,N,S],[1,0,E,WEST],[0,1,S,N],[-1,0,WEST,E]];
 const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
 let width=0,height=0,cols=17,rows=23,tileW=1,tileH=1,walls=new Uint8Array(0);
 let player={x:.5,y:.5},goal={x:16.5,y:22.5};
-let joystick={x:0,y:0},pointer=null,keys=new Set(),elapsed=0,celebrate=0,particles=[],last=0;
+let joystick={x:0,y:0},pointer=null,keys=new Set(),elapsed=0,celebrate=0,particles=[],last=0,ammo=2,blastWave=0;
 const cell=(x,y)=>y*cols+x,inside=(x,y)=>x>=0&&y>=0&&x<cols&&y<rows;
 function generateMaze(){
   // A perfect spanning-tree maze connects every cell, so both the player's
@@ -68,8 +71,54 @@ function generateMaze(){
     walls[cell(x,y)]&=~bit;
     walls[cell(nx,ny)]&=~opposite;
   }
+  // A maze may shift while the player is crossing an old doorway.
+  // Clear any newly spawned wall segment touching the player's actual circle,
+  // without changing its precise position or the goal.
+  const safetyRadius=.33;
+  function nearSegment(ax,ay,bx,by){
+    const dx=bx-ax,dy=by-ay;
+    const t=clamp(((player.x-ax)*dx+(player.y-ay)*dy)/(dx*dx+dy*dy),0,1);
+    return Math.hypot(player.x-(ax+dx*t),player.y-(ay+dy*t))<safetyRadius;
+  }
+  for(let y=0;y<rows;y++)for(let x=0;x<cols;x++){
+    if(x<cols-1 && nearSegment(x+1,y,x+1,y+1))removeWall(x,y,E);
+    if(y<rows-1 && nearSegment(x,y+1,x+1,y+1))removeWall(x,y,S);
+  }
   elapsed=0;
 }
+function removeWall(x,y,bit){
+  const nx=x+(bit===E?1:bit===WEST?-1:0);
+  const ny=y+(bit===S?1:bit===N?-1:0);
+  if(!inside(x,y)||!inside(nx,ny))return false;
+  const opposite=bit===N?S:bit===S?N:bit===E?WEST:E;
+  const present=!!(walls[cell(x,y)]&bit);
+  walls[cell(x,y)]&=~bit;walls[cell(nx,ny)]&=~opposite;
+  return present;
+}
+function refreshAmmo(){
+  blast.disabled=ammo===0;
+  blast.setAttribute('aria-label','Explode nearby walls, '+ammo+' charges remaining');
+  [...ammoDisplay.children].forEach((dot,i)=>dot.classList.toggle('empty',i>=ammo));
+}
+function explode(){
+  if(ammo<=0||celebrate>0)return;
+  ammo--;refreshAmmo();
+  const range=2.45;
+  let removed=0;
+  for(let y=0;y<rows;y++)for(let x=0;x<cols;x++){
+    if(x<cols-1&&Math.hypot(x+1-player.x,y+.5-player.y)<range)
+      removed+=Number(removeWall(x,y,E));
+    if(y<rows-1&&Math.hypot(x+.5-player.x,y+1-player.y)<range)
+      removed+=Number(removeWall(x,y,S));
+  }
+  blastWave=.5;
+  for(let i=0;i<35;i++){
+    const angle=Math.random()*Math.PI*2,speed=90+Math.random()*250;
+    particles.push({x:player.x*tileW,y:player.y*tileH,vx:Math.cos(angle)*speed,vy:Math.sin(angle)*speed,r:2+Math.random()*3,life:.35+Math.random()*.45,color:i%2?'#ffb347':'#fff3aa'});
+  }
+  announce.textContent=removed+' walls exploded. '+ammo+' charges left';
+}
+blast.addEventListener('click',explode);
 function resize(){
   const oldCols=cols,oldRows=rows;
   const box=board.getBoundingClientRect();
@@ -152,6 +201,11 @@ function draw(){
   ctx.shadowBlur=10;ctx.shadowColor='#00abed';
   disc(player.x*tileW,player.y*tileH,pr,'#078acb');
   ctx.shadowBlur=0;disc(player.x*tileW-pr*.18,player.y*tileH-pr*.22,pr*.43,'#bef3ff');
+  if(blastWave>0){
+    const t=1-blastWave/.5;
+    ctx.beginPath();ctx.arc(player.x*tileW,player.y*tileH,t*Math.min(tileW,tileH)*2.9,0,Math.PI*2);
+    ctx.strokeStyle='rgba(255,133,24,'+(1-t)+')';ctx.lineWidth=4*(1-t)+1;ctx.stroke();
+  }
   for(const p of particles){ctx.globalAlpha=clamp(p.life,0,1);disc(p.x,p.y,p.r,p.color);}
   ctx.globalAlpha=1;
   // Icon-only circular countdown; no on-screen text.
@@ -166,7 +220,7 @@ function update(dt){
     celebrate-=dt;
     if(celebrate<=0){
       // A successful run starts again, unlike an ordinary 10-second shift.
-      player={x:.5,y:.5};generateMaze();
+      player={x:.5,y:.5};ammo=2;refreshAmmo();generateMaze();
     }
   }else{
     move(dt);
@@ -179,6 +233,7 @@ function update(dt){
       generateMaze();announce.textContent='Maze changed';
     }
   }
+  blastWave=Math.max(0,blastWave-dt);
   for(const p of particles){p.x+=p.vx*dt;p.y+=p.vy*dt;p.life-=dt;}
   particles=particles.filter(p=>p.life>0);
 }
@@ -203,7 +258,7 @@ window.addEventListener('keydown',e=>{const key=e.key.toLowerCase();if(['arrowup
 window.addEventListener('keyup',e=>keys.delete(e.key.toLowerCase()));
 window.addEventListener('blur',()=>{keys.clear();release(null);});
 new ResizeObserver(resize).observe(board);
-resize();
+resize();refreshAmmo();
 function frame(t){const dt=Math.min(.04,(t-last)/1000||.016);last=t;update(dt);draw();requestAnimationFrame(frame);}
 requestAnimationFrame(frame);
 })();
